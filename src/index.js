@@ -24,11 +24,13 @@ const storage = multer.diskStorage({
         cb(null, uniqueSuffix + '-' + file.originalname)
     }
 })
-// console.log(LocalStrategy.Strategy)
+console.log(LocalStrategy.Strategy)
 const upload = multer({ storage: storage })
 
 const mongoose = require("mongoose");
+const serverMongo = process.env.SERVERMONGO || "mongodb://root:example@localhost:27017/";
 const User = require('./model/user')
+mongoose.connect(serverMongo);
 
 const Advertisement = require('./model/advertisement')
 // const users = require('./routers/users')
@@ -39,27 +41,58 @@ const server = http.Server(app);
 const io = socketIO(server);
 app.use(express.json())
 app.use(express.urlencoded({ extended: true }));
-app.use(session({secret: 'catcatcat'}));
+app.use(session({secret: 'secret123'}));
 
 // ------PASSPORT------------------------------------------------------------------------------------
-app.use(passport.initialize())
-app.use(passport.session())
-const options = {
-  usernameField: "username",
-  passwordField: "password",
-}
-passport.use('local', new LocalStrategy(options, verify))
+// passport.use('local', new LocalStrategy({
+//     usernameField: "email",
+//     passwordField: "passwordHash",
+// }, async (email, passwordHash, done) => {
+//     const user = await User.findByEmail(email);
+//     console.log('-----------------')
+//     console.log(user)
+//     console.log('-----------------')
+//     if (!user) {
+//       return done(null, false);
+//     } else if (user.passwordHash !== password) {
+//       return done(null, false);
+//     } else {
+//       return done(null, user)
+//     }
+//   }))
+
+
+passport.use(new LocalStrategy(
+    function(username, password, done) {
+        console.log('---------')
+      User.findOne({ username: username }, function (err, user) {
+        if (err) { return done(err); }
+        if (!user) { return done(null, false); }
+        if (!user.verifyPassword(password)) { return done(null, false); }
+        return done(null, user);
+      });
+    }
+  ));
+
 passport.serializeUser((user, cb) => {
-  cb(null, user.id)
+    console.log('serialize')
+    cb(null, user._id)
 })
 passport.deserializeUser(async (id, cb) => {
-  try {
-    const user = await User.find({ _id: id });
-    cb(null, user)
-  } catch (error) {
-    if (err) { return cb(err) }
-  }
+    console.log('deserialize')
+    try {
+        const user = await User.find({ _id: id });
+        cb(null, user)
+    } catch (error) {
+        if (err) { return cb(err) }
+    }
 })
+function checkAuth() {
+    return app.use((req, res, next) => {
+        if (req.user) next()
+        else res.redirect('/123')
+    })
+}
 
 app.use(passport.initialize());
 app.use(passport.session());
